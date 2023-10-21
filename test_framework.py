@@ -33,8 +33,8 @@ class Tester:
         print(f"[FAIL] {self.cur_test.name} ", msg)
         #raise ValueError()
 
-    def test_compare(self, a, b):
-        if a == b:
+    def test_compare(self, actual, expected):
+        if actual == expected:
             return False
-        self.test_fail (f"Expected {b} got {a}")
+        self.test_fail (f"Expected {expected} got {actual}")
         return True    

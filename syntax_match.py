@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from meta_lexer import Token, TokenType, apply_lexer
 
+from test_framework import Tester
+
 class SupplierEnd(Exception):
     pass
 
@@ -195,27 +197,88 @@ def value_pretty(a):
     elif isinstance(a, list):
         return [value_pretty(v) for v in a]
     elif isinstance(a, Token):
-        return f'{a._type.name}:[{a.s}]'
+        #return f'{a._type.name}:[{a.s}]'
+        return f'{a.s}'
     else:
         return a
 
-if __name__ == "__main__":
-    plu = TypeValueMatcher(None,TokenType.OPERATOR, '+')
-    slash = TypeValueMatcher(None,TokenType.OPERATOR, '/')
+def do_test():
+    plus = TypeValueMatcher(None,TokenType.OPERATOR, '+')
+    sharp = TypeValueMatcher(None,TokenType.OPERATOR, '#')
     iden = TypeMatcher(None,TokenType.IDENTIFIER)
-    space = RepeatMatcher(None, TypeMatcher(None,TokenType.SPACE), 0, 1)
+    space = TypeMatcher(None,TokenType.SPACE)
     end = EndMatcher(None)
-    slash_group = SequenceMatcher(None,[slash, plu, slash])
-    ope = OrMatcher(None,[slash_group, plu])
-    part = SequenceMatcher(None,[iden, ope])
-    rep_part = RepeatMatcher(None,part,1, -1)
-    total = SequenceMatcher(None,[rep_part, iden, end])
-    rep_op = RepeatMatcher(None, TypeMatcher(None,TokenType.OPERATOR), 1, -1)
-    
+
+    def repeat(matcher, min_ = 0, max_ = -1):
+        return RepeatMatcher(None, matcher, min_, max_)
+
+    def match_all(matcher):
+        return SequenceMatcher(None, [matcher, end])
+
+    def seq(*args):
+        return SequenceMatcher(None, args)
+
+
+    @dataclass
+    class MatchTest:
+        name: str
+        s: str
+        matcher: AbstractMatcher
+        result: list
+
+        def check(self, tester):
+            tokens = apply_lexer(self.s)
+            #print('Tokens', tokens)
+            supp = TokenSupplier(tokens, 0)
+
+            res = []
+            for ans in self.matcher.match(supp):
+                res.append(value_pretty(ans))
+
+
+            #print(res, self.result)
+
+            for actual, expected in zip(res, self.result):
+                if tester.test_compare (actual, expected):
+                    return False
+
+            return not tester.test_compare (len(res), len(self.result))
+
+    tests = [
+        MatchTest('plus_ok', '+', plus, ['+']),
+        MatchTest('plus_start_ok', '+AAA', plus, ['+']),
+        MatchTest('plus_fail', 'A', plus, []),
+        MatchTest('plus_end', '+', match_all(plus), [['+', None]]),
+        MatchTest('plus_end_fail', '+ ', match_all(plus), []),
+        MatchTest('sharp_repeat', '##', repeat(sharp), [['#', '#'], ['#'], []]),
+        MatchTest('sharp_repeat_no_empty', '##', repeat(sharp, min_=1), [['#', '#'], ['#']]),
+        MatchTest('seq_simple', '+A', seq(plus, iden), [['+', 'A']]),
+        MatchTest('seq_with_rep', '#A', seq(repeat(sharp), iden), [[['#'], 'A']]),
+        MatchTest('seq_with_rep2', '###A', seq(repeat(sharp), iden), [[['#', '#', '#'], 'A']]),
+        MatchTest('repeat_seq', '#A#B', match_all(repeat(seq(sharp, iden))), [[[['#', 'A'], ['#', 'B']], None]]),
+    ]
+
+    Tester().run(tests)
+
+
+def debug():
+    DEBUG_PRINTS = True
+    plu = TypeValueMatcher(None, TokenType.OPERATOR, '+')
+    slash = TypeValueMatcher(None, TokenType.OPERATOR, '/')
+    iden = TypeMatcher(None, TokenType.IDENTIFIER)
+    space = RepeatMatcher(None, TypeMatcher(None, TokenType.SPACE), 0, 1)
+    end = EndMatcher(None)
+    slash_group = SequenceMatcher(None, [slash, plu, slash])
+    ope = OrMatcher(None, [slash_group, plu])
+    part = SequenceMatcher(None, [iden, ope])
+    rep_part = RepeatMatcher(None, part, 1, -1)
+    total = SequenceMatcher(None, [rep_part, iden, end])
+    rep_op = RepeatMatcher(None, TypeMatcher(None, TokenType.OPERATOR), 1, -1)
+
     init = 'A/+/B+C'
     s = None
     while True:
-        #s = input('>>> ')
+        # s = input('>>> ')
         if not s:
             s = init
             print('>>>', s)
@@ -235,7 +298,11 @@ if __name__ == "__main__":
             print(f'\tNICE {i} - ', value_pretty(ans))
 
         print(f'\tNumber matches {len(out)}')
-        
+
         s = input('>>> ')
         if s == 'exit':
             break
+
+if __name__ == "__main__":
+    do_test()
+    # debug()
